@@ -47,7 +47,7 @@ data class Event(
     val endTime: Long
 )
 
-val eventMap = mutableMapOf<Int, MutableList<Event>>()
+val eventMap = mutableMapOf<Long, MutableList<Event>>()
 
 class MainActivity : ComponentActivity() {
     private val CALENDAR_PERMISSION_CODE = 1
@@ -134,38 +134,42 @@ class MainActivity : ComponentActivity() {
 
 
         cursor?.apply {
-            cursor.moveToFirst()
-            while (moveToNext()) {
-                // Check if the column index is valid (not -1) before retrieving data
-                val eventIdIndex = cursor.getColumnIndex(CalendarContract.Events._ID)
-                val eventTitleIndex = cursor.getColumnIndex(CalendarContract.Events.TITLE)
-                val eventStartTimeIndex = cursor.getColumnIndex(CalendarContract.Events.DTSTART)
-                val eventEndTimeIndex = cursor.getColumnIndex(CalendarContract.Events.DTEND)
 
-                // Only retrieve data if the column index is valid
-                if (eventIdIndex != -1 && eventTitleIndex != -1 && eventStartTimeIndex != -1 && eventEndTimeIndex != -1) {
-                    val eventId = cursor.getLong(eventIdIndex)
-                    val eventTitle = cursor.getString(eventTitleIndex)
-                    val eventStartTime = cursor.getLong(eventStartTimeIndex)
-                    val eventEndTime = cursor.getLong(eventEndTimeIndex)
 
-                    // Process the event details (e.g., display them in your app UI)
-                    val event =  Event(eventId, eventTitle, eventStartTime, eventEndTime)
-                    eventDate += 1
+            // Get column indices once before the loop to avoid recalculating them repeatedly
+            val eventIdIndex = getColumnIndex(CalendarContract.Events._ID)
+            val eventTitleIndex = getColumnIndex(CalendarContract.Events.TITLE)
+            val eventStartTimeIndex = getColumnIndex(CalendarContract.Events.DTSTART)
+            val eventEndTimeIndex = getColumnIndex(CalendarContract.Events.DTEND)
 
-                    // Add the Event object to the map, grouping by date
-
-                    eventMap[eventDate] = mutableListOf()
-                    eventMap[eventDate]?.add(event)
-                } else {
-                    // Log a message indicating that one or more columns are missing
-                    Log.e(
-                        "CalendarEvent",
-                        "One or more columns are missing from the cursor result set"
-                    )
-                }
+            if (eventIdIndex == -1 || eventTitleIndex == -1 || eventStartTimeIndex == -1 || eventEndTimeIndex == -1) {
+                Log.e("CalendarEvent", "One or more essential columns are missing from the cursor result set")
+                return@apply
             }
+
+            // Loop through the cursor data
+            while (moveToNext()) {
+                val eventId = getLong(eventIdIndex)
+                val eventTitle = getString(eventTitleIndex)
+                val eventStartTime = getLong(eventStartTimeIndex)
+                val eventEndTime = getLong(eventEndTimeIndex)
+
+                // Process the event details
+                val event = Event(eventId, eventTitle, eventStartTime, eventEndTime)
+
+                // Assuming the date key for grouping is the start date without time
+                val eventDate = eventStartTime / (1000 * 60 * 60 * 24) // Convert ms to days
+
+                // Add the Event object to the map, grouping by date
+                if (eventMap[eventDate] == null) {
+                    eventMap[eventDate] = mutableListOf()
+                }
+                eventMap[eventDate]?.add(event)
+            }
+
+            // Now you can use the eventMap where each key is a day and value is a list of events of that day
         }
+
     }
 }
 
@@ -179,22 +183,22 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun DailyEventPager(eventMap: Map<Int, List<Event>>) {
+fun DailyEventPager(eventMap: Map<Long, List<Event>>) {
     val pagerState = rememberPagerState()
-    var selectedDate = 0
 
     LaunchedEffect(pagerState.currentPage) {
         pagerState.animateScrollToPage(pagerState.currentPage)
     }
 
     val coroutineScope = rememberCoroutineScope()
+    val dates = eventMap.keys.sorted() // Ensure the dates are sorted
 
     HorizontalPager(
-        count = eventMap.size,
+        count = dates.size,
         state = pagerState,
         modifier = Modifier.fillMaxSize()
     ) { page ->
-        selectedDate += 1
+        val selectedDate = dates.elementAtOrNull(page) ?: return@HorizontalPager // Get the correct date based on the current page
         val events = eventMap[selectedDate] ?: emptyList()
         DayEventsScreen(selectedDate, events)
     }
@@ -216,7 +220,7 @@ fun DailyEventPager(eventMap: Map<Int, List<Event>>) {
 
         Button(onClick = {
             coroutineScope.launch {
-                if (pagerState.currentPage < eventMap.size - 1) {
+                if (pagerState.currentPage < dates.size - 1) {
                     pagerState.scrollToPage(pagerState.currentPage + 1)
                 }
             }
@@ -230,25 +234,13 @@ fun DailyEventPager(eventMap: Map<Int, List<Event>>) {
 
 
 @Composable
-fun DayEventsScreen(day: Int, events: List<Event>) {
+fun DayEventsScreen(day: Long, events: List<Event>) {
     Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "Events on $day", style = MaterialTheme.typography.displayLarge)
         LazyColumn {
             items(events) { event ->
                 EventItem(event)
             }
-        }
-    }
-}
-
-
-
-
-@Composable
-fun EventList(events: List<Event>) {
-    LazyColumn {
-        items(events) { event ->
-            EventItem(event)
         }
     }
 }
@@ -277,6 +269,7 @@ fun EventItem(event: Event) {
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
