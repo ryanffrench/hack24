@@ -200,7 +200,7 @@ fun DailyEventPager(eventMap: Map<Long, List<Event>>) {
     ) { page ->
         val selectedDate = dates.elementAtOrNull(page) ?: return@HorizontalPager // Get the correct date based on the current page
         val events = eventMap[selectedDate] ?: emptyList()
-        DayEventsScreen(selectedDate, events)
+        DayEventsScreen(events)
     }
 
     // Navigation Row for previous and next day
@@ -234,11 +234,18 @@ fun DailyEventPager(eventMap: Map<Long, List<Event>>) {
 
 
 @Composable
-fun DayEventsScreen(day: Long, events: List<Event>) {
+fun DayEventsScreen(events: List<Event>) {
+    val simpleDateFormat = SimpleDateFormat("EEE, d MMM yyyy", Locale.getDefault())
+
     Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "Events on $day", style = MaterialTheme.typography.displayLarge)
+        var lastDisplayedDate: String? = null
         LazyColumn {
             items(events) { event ->
+                val eventDate = simpleDateFormat.format(event.startTime)
+                if (lastDisplayedDate == null) {
+                    Text(text = "Events on $eventDate", style = MaterialTheme.typography.displayMedium)
+                    lastDisplayedDate = eventDate
+                }
                 EventItem(event)
             }
         }
